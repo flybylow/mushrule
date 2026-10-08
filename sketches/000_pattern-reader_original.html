@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pattern Reader</title>
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --surface: #1a1a1a;
+    --border: #2e2e2e;
+    --text: #d8d0c4;
+    --muted: #666;
+    --accent: #c8a96e;
+    --pulse: #e8c87e;
+    --active: #f0d898;
+    --danger: #c46;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    grid-template-columns: 1fr 280px;
+    grid-template-areas:
+      "header header"
+      "canvas sidebar"
+      "transport transport";
+    overflow: hidden;
+  }
+
+  header {
+    grid-area: header;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  header h1 {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .load-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 12px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .load-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: auto;
+  }
+
+  /* Canvas area */
+  #canvas-wrap {
+    grid-area: canvas;
+    position: relative;
+    overflow: hidden;
+    background: #080808;
+    cursor: crosshair;
+  }
+
+  #main-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    image-rendering: pixelated;
+  }
+
+  #overlay-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+  }
+
+  /* Sidebar */
+  aside {
+    grid-area: sidebar;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-section h2 {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .scan-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  input[type=range] {
+    width: 120px;
+    accent-color: var(--accent);
+  }
+
+  input[type=number] {
+    width: 56px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+
+  select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 3px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    width: 100%;
+  }
+
+  /* Sequence display */
+  #seq-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+
+  #seq-grid {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 2px;
+  }
+
+  .seq-cell {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    transition: background 0.05s;
+  }
+
+  .seq-cell.on { background: var(--accent); }
+  .seq-cell.off { background: var(--border); }
+  .seq-cell.playing { background: var(--active); box-shadow: 0 0 6px var(--pulse); }
+
+  /* Regions list */
+  #regions-list {
+    padding: 0 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+
+  .region-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 11px;
+  }
+
+  .region-color {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .region-label { flex: 1; }
+
+  .region-del {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  .region-del:hover { color: var(--danger); }
+
+  /* Transport */
+  footer {
+    grid-area: transport;
+    border-top: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .transport-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s;
+  }
+  .transport-btn:hover { border-color: var(--accent); }
+  .transport-btn.active { border-color: var(--accent); color: var(--accent); }
+
+  #bpm-display {
+    font-size: 20px;
+    color: var(--accent);
+    width: 48px;
+    text-align: right;
+  }
+
+  .transport-label { color: var(--muted); font-size: 11px; }
+
+  #step-indicator {
+    flex: 1;
+    display: flex;
+    gap: 3px;
+    align-items: center;
+  }
+
+  .step-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.05s;
+  }
+  .step-dot.active { background: var(--accent); }
+
+  #scan-mode-label {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Drop overlay */
+  #drop-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  #drop-overlay .icon { font-size: 48px; opacity: 0.3; }
+  #drop-overlay .msg { font-size: 12px; letter-spacing: 0.08em; }
+
+  .val-display {
+    color: var(--text);
+    min-width: 28px;
+    text-align: right;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pattern Reader</h1>
+  <button class="load-btn" id="load-btn">Load image</button>
+  <button class="load-btn" id="clear-btn">Clear regions</button>
+  <span class="hint">Draw regions on the image → they become sequences</span>
+  <input type="file" id="file-input" accept="image/*" style="display:none">
+</header>
+
+<div id="canvas-wrap">
+  <canvas id="main-canvas"></canvas>
+  <canvas id="overlay-canvas"></canvas>
+  <div id="drop-overlay">
+    <div class="icon">⬡</div>
+    <div class="msg">Drop an image here or use Load image</div>
+    <div class="msg" style="opacity:0.5;font-size:10px">Then draw a rectangle on any pattern area</div>
+  </div>
+</div>
+
+<aside>
+  <div class="sidebar-section">
+    <h2>Scan</h2>
+    <div class="scan-controls">
+      <label>
+        Steps
+        <input type="range" id="steps-slider" min="8" max="64" value="16" step="8">
+        <span class="val-display" id="steps-val">16</span>
+      </label>
+      <label>
+        Threshold
+        <input type="range" id="thresh-slider" min="0" max="255" value="128">
+        <span class="val-display" id="thresh-val">128</span>
+      </label>
+      <label>
+        Scan axis
+        <select id="axis-select">
+          <option value="x">Horizontal (→)</option>
+          <option value="y">Vertical (↓)</option>
+          <option value="radial">Radial (○)</option>
+        </select>
+      </label>
+      <label>
+        Channel
+        <select id="channel-select">
+          <option value="luma">Luminance</option>
+          <option value="r">Red</option>
+          <option value="g">Green</option>
+          <option value="b">Blue</option>
+          <option value="edge">Edge detect</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <h2>Regions</h2>
+    <div id="regions-list"></div>
+  </div>
+
+  <div class="sidebar-section">
+    <h2>Sequence — active region</h2>
+  </div>
+  <div id="seq-wrap">
+    <div id="seq-grid"></div>
+  </div>
+</aside>
+
+<footer>
+  <button class="transport-btn" id="play-btn" title="Play/Stop">▶</button>
+  <span class="transport-label">BPM</span>
+  <span id="bpm-display">120</span>
+  <input type="range" id="bpm-slider" min="40" max="240" value="120" style="width:80px;accent-color:#c8a96e">
+  <div id="step-indicator"></div>
+  <span id="scan-mode-label">Draw a region to extract a pattern</span>
+</footer>
+
+<script>
+const COLORS = ['#c8a96e','#6ea8c8','#a8c86e','#c86ea8','#6ec8a8','#c8786e','#786ec8'];
+
+let img = null;
+let regions = [];
+let activeRegion = null;
+let drawing = false;
+let drawStart = null;
+let currentRect = null;
+
+let steps = 16;
+let threshold = 128;
+let axis = 'x';
+let channel = 'luma';
+
+let playing = false;
+let bpm = 120;
+let currentStep = 0;
+let intervalId = null;
+
+// Canvas setup
+const wrap = document.getElementById('canvas-wrap');
+const mainCanvas = document.getElementById('main-canvas');
+const overlayCanvas = document.getElementById('overlay-canvas');
+const mainCtx = mainCanvas.getContext('2d', { willReadFrequently: true });
+const overlayCtx = overlayCanvas.getContext('2d');
+
+function resizeCanvases() {
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  mainCanvas.width = w; mainCanvas.height = h;
+  overlayCanvas.width = w; overlayCanvas.height = h;
+  if (img) drawImage();
+  drawOverlay();
+}
+
+window.addEventListener('resize', resizeCanvases);
+resizeCanvases();
+
+// Image loading
+document.getElementById('load-btn').onclick = () => document.getElementById('file-input').click();
+document.getElementById('file-input').onchange = e => loadFile(e.target.files[0]);
+
+wrap.addEventListener('dragover', e => e.preventDefault());
+wrap.addEventListener('drop', e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+
+function loadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const i = new Image();
+    i.onload = () => {
+      img = i;
+      document.getElementById('drop-overlay').style.display = 'none';
+      drawImage();
+    };
+    i.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function drawImage() {
+  if (!img) return;
+  const cw = mainCanvas.width, ch = mainCanvas.height;
+  const scale = Math.min(cw / img.width, ch / img.height);
+  const dw = img.width * scale, dh = img.height * scale;
+  const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+  mainCtx.clearRect(0, 0, cw, ch);
+  mainCtx.drawImage(img, dx, dy, dw, dh);
+
+  // store transform info
+  mainCanvas._imgX = dx; mainCanvas._imgY = dy;
+  mainCanvas._imgW = dw; mainCanvas._imgH = dh;
+  mainCanvas._scale = scale;
+
+  drawOverlay();
+}
+
+// Draw overlay: regions + current drawing rect
+function drawOverlay() {
+  const ctx = overlayCtx;
+  ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+  // Scan line
+  if (playing && activeRegion) {
+    const r = activeRegion;
+    const x = r.x + (currentStep / steps) * r.w;
+    ctx.strokeStyle = '#fff8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, r.y);
+    ctx.lineTo(x, r.y + r.h);
+    ctx.stroke();
+  }
+
+  // Regions
+  regions.forEach((r, i) => {
+    const col = COLORS[i % COLORS.length];
+    const isActive = r === activeRegion;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = isActive ? 2 : 1;
+    ctx.globalAlpha = isActive ? 1 : 0.6;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = col;
+    ctx.globalAlpha = 0.08;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.globalAlpha = 1;
+    // label
+    ctx.fillStyle = col;
+    ctx.font = '10px Courier New';
+    ctx.fillText(`R${i+1}`, r.x + 4, r.y + 12);
+  });
+
+  // Currently drawing
+  if (drawing && currentRect) {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(currentRect.x, currentRect.y, currentRect.w, currentRect.h);
+    ctx.setLineDash([]);
+  }
+}
+
+// Mouse drawing
+overlayCanvas.style.pointerEvents = 'auto';
+overlayCanvas.style.cursor = 'crosshair';
+
+overlayCanvas.addEventListener('mousedown', e => {
+  if (!img) return;
+  drawing = true;
+  const pos = getPos(e);
+  drawStart = pos;
+  currentRect = { x: pos.x, y: pos.y, w: 0, h: 0 };
+});
+
+overlayCanvas.addEventListener('mousemove', e => {
+  if (!drawing) return;
+  const pos = getPos(e);
+  currentRect = {
+    x: Math.min(drawStart.x, pos.x),
+    y: Math.min(drawStart.y, pos.y),
+    w: Math.abs(pos.x - drawStart.x),
+    h: Math.abs(pos.y - drawStart.y)
+  };
+  drawOverlay();
+});
+
+overlayCanvas.addEventListener('mouseup', e => {
+  if (!drawing) return;
+  drawing = false;
+  if (currentRect && currentRect.w > 10 && currentRect.h > 10) {
+    const region = { ...currentRect, id: Date.now() };
+    regions.push(region);
+    activeRegion = region;
+    extractRegion(region);
+    renderRegionsList();
+  }
+  currentRect = null;
+  drawOverlay();
+});
+
+function getPos(e) {
+  const rect = overlayCanvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+// Clear
+document.getElementById('clear-btn').onclick = () => {
+  regions = [];
+  activeRegion = null;
+  renderRegionsList();
+  renderSeqGrid([]);
+  drawOverlay();
+};
+
+// Extraction
+function getPixelValue(data, x, y, w) {
+  const i = (y * w + x) * 4;
+  const r = data[i], g = data[i+1], b = data[i+2];
+  switch (channel) {
+    case 'luma': return 0.299*r + 0.587*g + 0.114*b;
+    case 'r': return r;
+    case 'g': return g;
+    case 'b': return b;
+    case 'edge': {
+      // Simple Sobel-ish: compare to right and below
+      const i2 = (y * w + Math.min(x+1, w-1)) * 4;
+      const i3 = (Math.min(y+1, 1000) * w + x) * 4;
+      const dx = Math.abs(data[i] - data[i2]);
+      const dy = Math.abs(data[i] - data[i3]);
+      return Math.min(255, (dx + dy) * 2);
+    }
+  }
+  return 0;
+}
+
+function extractRegion(region) {
+  if (!img) return;
+  // Get pixel data for the region from main canvas
+  const sx = Math.max(0, Math.round(region.x));
+  const sy = Math.max(0, Math.round(region.y));
+  const sw = Math.max(1, Math.round(region.w));
+  const sh = Math.max(1, Math.round(region.h));
+
+  let imageData;
+  try {
+    imageData = mainCtx.getImageData(sx, sy, sw, sh);
+  } catch(e) { return; }
+
+  const data = imageData.data;
+  const sequence = [];
+
+  if (axis === 'x') {
+    for (let s = 0; s < steps; s++) {
+      const x = Math.floor((s / steps) * sw);
+      let sum = 0;
+      for (let y = 0; y < sh; y++) {
+        sum += getPixelValue(data, Math.min(x, sw-1), y, sw);
+      }
+      const avg = sum / sh;
+      sequence.push(avg > threshold ? 1 : 0);
+    }
+  } else if (axis === 'y') {
+    for (let s = 0; s < steps; s++) {
+      const y = Math.floor((s / steps) * sh);
+      let sum = 0;
+      for (let x = 0; x < sw; x++) {
+        sum += getPixelValue(data, x, Math.min(y, sh-1), sw);
+      }
+      const avg = sum / sw;
+      sequence.push(avg > threshold ? 1 : 0);
+    }
+  } else if (axis === 'radial') {
+    const cx = sw / 2, cy = sh / 2;
+    const maxR = Math.min(cx, cy);
+    for (let s = 0; s < steps; s++) {
+      const angle = (s / steps) * Math.PI * 2;
+      let sum = 0, count = 0;
+      for (let r = 0; r < maxR; r += 1) {
+        const x = Math.floor(cx + Math.cos(angle) * r);
+        const y = Math.floor(cy + Math.sin(angle) * r);
+        if (x >= 0 && x < sw && y >= 0 && y < sh) {
+          sum += getPixelValue(data, x, y, sw);
+          count++;
+        }
+      }
+      const avg = count ? sum / count : 0;
+      sequence.push(avg > threshold ? 1 : 0);
+    }
+  }
+
+  region.sequence = sequence;
+  renderSeqGrid(sequence);
+  updateStepIndicator();
+}
+
+function reExtractActive() {
+  if (activeRegion) extractRegion(activeRegion);
+}
+
+// Sequence grid
+function renderSeqGrid(seq) {
+  const grid = document.getElementById('seq-grid');
+  grid.style.gridTemplateColumns = `repeat(${Math.min(seq.length, 16)}, 1fr)`;
+  grid.innerHTML = '';
+  seq.forEach((v, i) => {
+    const cell = document.createElement('div');
+    cell.className = `seq-cell ${v ? 'on' : 'off'}`;
+    cell.dataset.i = i;
+    cell.addEventListener('click', () => {
+      if (activeRegion && activeRegion.sequence) {
+        activeRegion.sequence[i] = activeRegion.sequence[i] ? 0 : 1;
+        renderSeqGrid(activeRegion.sequence);
+      }
+    });
+    grid.appendChild(cell);
+  });
+}
+
+function updateSeqHighlight() {
+  const cells = document.querySelectorAll('.seq-cell');
+  cells.forEach((c, i) => {
+    c.classList.remove('playing');
+    if (i === currentStep % cells.length) c.classList.add('playing');
+  });
+}
+
+// Regions list
+function renderRegionsList() {
+  const list = document.getElementById('regions-list');
+  list.innerHTML = '';
+  regions.forEach((r, i) => {
+    const col = COLORS[i % COLORS.length];
+    const item = document.createElement('div');
+    item.className = 'region-item';
+    item.style.borderColor = r === activeRegion ? col : '';
+    item.innerHTML = `
+      <div class="region-color" style="background:${col}"></div>
+      <span class="region-label">R${i+1} — ${Math.round(r.w)}×${Math.round(r.h)}px</span>
+      <button class="region-del" data-i="${i}">×</button>
+    `;
+    item.addEventListener('click', (e) => {
+      if (e.target.classList.contains('region-del')) return;
+      activeRegion = r;
+      renderRegionsList();
+      if (r.sequence) renderSeqGrid(r.sequence);
+      drawOverlay();
+    });
+    item.querySelector('.region-del').addEventListener('click', () => {
+      regions.splice(i, 1);
+      if (activeRegion === r) {
+        activeRegion = regions[regions.length - 1] || null;
+        renderSeqGrid(activeRegion?.sequence || []);
+      }
+      renderRegionsList();
+      drawOverlay();
+    });
+    list.appendChild(item);
+  });
+}
+
+// Controls
+document.getElementById('steps-slider').addEventListener('input', function() {
+  steps = +this.value;
+  document.getElementById('steps-val').textContent = steps;
+  reExtractActive();
+});
+document.getElementById('thresh-slider').addEventListener('input', function() {
+  threshold = +this.value;
+  document.getElementById('thresh-val').textContent = threshold;
+  reExtractActive();
+});
+document.getElementById('axis-select').addEventListener('change', function() {
+  axis = this.value; reExtractActive();
+});
+document.getElementById('channel-select').addEventListener('change', function() {
+  channel = this.value; reExtractActive();
+});
+
+// Step indicator
+function updateStepIndicator() {
+  const ind = document.getElementById('step-indicator');
+  ind.innerHTML = '';
+  for (let i = 0; i < steps; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'step-dot' + (i === currentStep ? ' active' : '');
+    ind.appendChild(dot);
+  }
+}
+updateStepIndicator();
+
+// Transport / audio
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function getAudio() {
+  if (!audioCtx) audioCtx = new AudioContext();
+  return audioCtx;
+}
+
+function triggerStep() {
+  if (!activeRegion?.sequence) { currentStep = (currentStep + 1) % steps; return; }
+  const seq = activeRegion.sequence;
+  const stepLen = seq.length;
+  const s = currentStep % stepLen;
+
+  if (seq[s]) {
+    const ac = getAudio();
+    // Pitch mapped to position in sequence — higher steps = higher pitch
+    const freq = 80 + (s / stepLen) * 800;
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.15, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.18);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start();
+    osc.stop(ac.currentTime + 0.2);
+  }
+
+  updateSeqHighlight();
+  drawOverlay();
+
+  // Also trigger all other regions at their step
+  regions.forEach(r => {
+    if (r === activeRegion || !r.sequence) return;
+    const rs = currentStep % r.sequence.length;
+    if (r.sequence[rs]) {
+      const ac = getAudio();
+      const ri = regions.indexOf(r);
+      const freq = 120 + ri * 150 + (rs / r.sequence.length) * 400;
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = ['triangle','sawtooth','square'][ri % 3];
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.08, ac.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start();
+      osc.stop(ac.currentTime + 0.15);
+    }
+  });
+
+  const dots = document.querySelectorAll('.step-dot');
+  dots.forEach((d, i) => d.classList.toggle('active', i === currentStep % steps));
+
+  currentStep = (currentStep + 1) % steps;
+}
+
+document.getElementById('bpm-slider').addEventListener('input', function() {
+  bpm = +this.value;
+  document.getElementById('bpm-display').textContent = bpm;
+  if (playing) { clearInterval(intervalId); intervalId = setInterval(triggerStep, 60000 / bpm / 4); }
+});
+
+document.getElementById('play-btn').addEventListener('click', function() {
+  playing = !playing;
+  this.textContent = playing ? '■' : '▶';
+  this.classList.toggle('active', playing);
+  if (playing) {
+    currentStep = 0;
+    intervalId = setInterval(triggerStep, 60000 / bpm / 4);
+  } else {
+    clearInterval(intervalId);
+    drawOverlay();
+    updateSeqHighlight();
+  }
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    document.getElementById('play-btn').click();
+  }
+});
+
+// Init step dots
+updateStepIndicator();
+</script>
+</body>
+</html>

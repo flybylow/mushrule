@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Handover — o × o</title>
+<style>
+  :root{
+    --kiln:#1b1a17;        /* fired stoneware dark ground */
+    --kiln-2:#232019;      /* panel */
+    --line:#3a352c;        /* hairline */
+    --bone:#e9e2d0;        /* the live mark */
+    --ash:#8a8272;         /* dim text */
+    --ember:#c66b3d;       /* single restrained oxide accent */
+    --ember-dim:#7a4327;
+    --dead:#2a271f;        /* empty cell */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--kiln);color:var(--bone);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    -webkit-font-smoothing:antialiased}
+  body{max-width:760px;margin:0 auto;padding:18px 16px 48px}
+
+  header{display:flex;align-items:baseline;justify-content:space-between;
+    gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:14px}
+  h1{font-size:15px;font-weight:600;letter-spacing:.02em;margin:0;color:var(--bone)}
+  h1 span{color:var(--ember)}
+  .rulehead{font-size:13px;color:var(--ash)}
+  .rulehead b{color:var(--bone);font-weight:600}
+
+  section{margin-top:22px}
+  .lbl{font-size:11px;color:var(--ash);letter-spacing:.06em;margin:0 0 9px}
+
+  /* ---- rule table: the fireable payload ---- */
+  #ruletable{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  @media(max-width:520px){#ruletable{grid-template-columns:repeat(2,1fr)}}
+  .case{background:var(--kiln-2);border:1px solid var(--line);border-radius:2px;
+    padding:9px 6px;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .case.on{border-color:var(--ember-dim);background:#241d16}
+  .nb{display:flex;gap:3px}
+  .g{width:15px;height:15px;display:flex;align-items:center;justify-content:center;
+    font-size:12px;line-height:1;border-radius:50%}
+  .g.x{background:var(--bone);color:var(--kiln);font-weight:700}
+  .g.o{border:1px solid var(--ash);color:var(--ash)}
+  .arw{font-size:9px;color:var(--ash);height:6px;line-height:1}
+  .res{font-weight:700}
+  .res.x{color:var(--ember)}
+  .res.o{color:var(--ash)}
+
+  /* ---- controls ---- */
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .step{display:flex;align-items:center;border:1px solid var(--line);border-radius:2px;
+    background:var(--kiln-2);overflow:hidden}
+  .step button{background:none;border:none;color:var(--bone);font:inherit;
+    font-size:16px;width:34px;height:34px;cursor:pointer}
+  .step button:active{background:var(--line)}
+  .step input{width:52px;height:34px;background:none;border:none;border-left:1px solid var(--line);
+    border-right:1px solid var(--line);color:var(--bone);font:inherit;font-size:14px;
+    text-align:center;-moz-appearance:textfield}
+  .step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none}
+  .chip{background:var(--kiln-2);border:1px solid var(--line);color:var(--ash);
+    font:inherit;font-size:12px;padding:6px 9px;border-radius:2px;cursor:pointer}
+  .chip:active{background:var(--line)}
+  .chip.on{border-color:var(--ember);color:var(--ember)}
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .pre{background:none;border:1px solid var(--line);color:var(--ash);font:inherit;
+    font-size:12px;padding:5px 8px;border-radius:2px;cursor:pointer;text-align:left}
+  .pre b{color:var(--bone);font-weight:600}
+  .pre:hover{border-color:var(--ash)}
+  .pre.on{border-color:var(--ember);background:#241d16}
+  .pre.on b{color:var(--ember)}
+
+  /* ---- class readout ---- */
+  #verdict{margin-top:12px;font-size:12px;line-height:1.55;color:var(--ash);
+    border-left:2px solid var(--ember-dim);padding:2px 0 2px 11px;min-height:1.5em}
+  #verdict b{color:var(--bone);font-weight:600}
+  #verdict .rd{color:var(--ember)}
+
+  /* ---- bloom ---- */
+  .seedhint{font-size:11px;color:var(--ash);margin:0 0 7px}
+  #wrap{background:var(--kiln-2);border:1px solid var(--line);border-radius:2px;padding:8px}
+  canvas{display:block;width:100%;height:auto;image-rendering:pixelated;cursor:crosshair}
+  .foldrow{display:flex;align-items:center;gap:10px;margin-top:12px}
+  .foldrow input[type=range]{flex:1;accent-color:var(--ember)}
+  .foldrow .v{font-size:12px;color:var(--ash);white-space:nowrap;min-width:74px;text-align:right}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>handover · <span>o × o</span></h1>
+  <div class="rulehead">rule <b id="rn">90</b> · <span id="cls">nested</span></div>
+</header>
+
+<!-- RULE TABLE -->
+<section>
+  <p class="lbl">THE RULE — 8 cases · this is what you fire into clay</p>
+  <div id="ruletable"></div>
+</section>
+
+<!-- CONTROLS -->
+<section>
+  <div class="row">
+    <div class="step">
+      <button id="dec" aria-label="previous rule">−</button>
+      <input id="rin" type="number" min="0" max="255" value="90">
+      <button id="inc" aria-label="next rule">+</button>
+    </div>
+    <button class="chip on" id="notation">o / × marks</button>
+    <button class="chip" id="seedmode">seed: single</button>
+  </div>
+  <div class="presets" id="presets"></div>
+  <div id="verdict"></div>
+</section>
+
+<!-- BLOOM -->
+<section>
+  <p class="lbl">THE BLOOM — grown from the seed row, top to bottom</p>
+  <p class="seedhint">tap the top row to plant / clear cells · encode data in the seed</p>
+  <div id="wrap"><canvas id="cv"></canvas></div>
+  <div class="foldrow">
+    <input id="fold" type="range" min="1" max="100" value="100">
+    <span class="v" id="foldv">show all</span>
+  </div>
+  <p class="seedhint" id="foldnote">handover test: hide the lower rows, then try to continue the pattern by eye.</p>
+</section>
+
+<script>
+(() => {
+  const CV = document.getElementById('cv');
+  const ctx = CV.getContext('2d');
+
+  // ---- state ----
+  const COLS = 61;                // odd, so a single centre seed is symmetric
+  let ROWS = 61;
+  let rule = 90;
+  let glyphMode = true;           // o/× marks vs solid cells
+  let seedMode = 'single';        // 'single' | 'random'
+  let seed = new Uint8Array(COLS);
+  let foldRow = ROWS;             // reveal rows above this
+  let grid = [];                  // computed rows
+
+  const KNOWN = {
+    90:  ['nested','<b>Sierpinski.</b> XOR of the two neighbours. Perfectly self-similar — <span class="rd">a person can continue it by eye.</span> Low data, clean handover.'],
+    150: ['nested','<b>Dense Sierpinski.</b> XOR of all three cells. Still regular and predictable — <span class="rd">readable</span>, but busier than 90.'],
+    30:  ['chaotic','<b>Chaos.</b> Used as a random-number generator. Huge entropy, <span class="rd">no human can continue it.</span> High data, zero handover.'],
+    110: ['complex','<b>Universal.</b> Proven Turing-complete. Localised structures drift and collide — <span class="rd">can carry any data, but reading it back means running it.</span> The frontier.'],
+    54:  ['complex','<b>Complex.</b> Class-4 candidate — stable structures on a periodic background. Sits near the readable / universal knife-edge.'],
+    60:  ['nested','<b>One-sided Sierpinski.</b> Leans right. Fully predictable — <span class="rd">continuable by eye.</span>'],
+    22:  ['chaotic','<b>Fractal chaos.</b> Nested at a glance, unpredictable up close. Mostly un-continuable.'],
+    250: ['nested','<b>Solid cone.</b> Alive if either neighbour is alive. Trivially readable, but hands over almost nothing.'],
+    45:  ['chaotic','<b>Chaos.</b> Another asymmetric random generator — un-continuable.'],
+    126: ['chaotic','<b>Chaotic Sierpinski frame.</b> Structured edges, chaotic interior.'],
+    18:  ['nested','<b>Sparse Sierpinski.</b> Thin self-similar gasket — readable.'],
+    0:   ['uniform','<b>Dies.</b> Everything goes to o. Nothing survives, nothing hands over.'],
+    255: ['uniform','<b>Fills.</b> Everything goes to ×. Saturates — no information left.']
+  };
+  const PRESETS = [90,150,30,110,54,60,22,250];
+
+  // ---- rule mechanics ----
+  function ruleBits(r){ const b=[]; for(let i=0;i<8;i++) b[i]=(r>>i)&1; return b; } // b[neighbourhood]
+  function nextRow(prev){
+    const out=new Uint8Array(COLS), b=ruleBits(rule);
+    for(let i=0;i<COLS;i++){
+      const l=prev[(i-1+COLS)%COLS], c=prev[i], rr=prev[(i+1)%COLS];
+      out[i]=b[(l<<2)|(c<<1)|rr];
+    }
+    return out;
+  }
+  function compute(){
+    grid=[seed.slice()];
+    for(let y=1;y<ROWS;y++) grid.push(nextRow(grid[y-1]));
+  }
+
+  // ---- seed ----
+  function makeSeed(){
+    seed=new Uint8Array(COLS);
+    if(seedMode==='single') seed[(COLS-1)>>1]=1;
+    else for(let i=0;i<COLS;i++) seed[i]=Math.random()<0.5?1:0;
+  }
+
+  // ---- render rule table ----
+  function drawTable(){
+    const b=ruleBits(rule), host=document.getElementById('ruletable');
+    host.innerHTML='';
+    for(let n=7;n>=0;n--){               // 111 → 000
+      const res=b[n];
+      const cell=document.createElement('div');
+      cell.className='case'+(res?' on':'');
+      const nb=document.createElement('div'); nb.className='nb';
+      for(let k=2;k>=0;k--){
+        const bit=(n>>k)&1;
+        const g=document.createElement('div');
+        g.className='g '+(bit?'x':'o'); g.textContent=bit?'×':'o';
+        nb.appendChild(g);
+      }
+      const arw=document.createElement('div'); arw.className='arw'; arw.textContent='▼';
+      const r=document.createElement('div');
+      r.className='res '+(res?'x':'o'); r.textContent=res?'×':'o';
+      cell.append(nb,arw,r); host.appendChild(cell);
+    }
+  }
+
+  // ---- render bloom ----
+  function drawBloom(){
+    const wrap=document.getElementById('wrap');
+    const cw=wrap.clientWidth-16;
+    const cell=Math.max(4,Math.floor(cw/COLS));
+    const W=cell*COLS, H=cell*ROWS;
+    CV.width=W; CV.height=H; CV.style.width=W+'px';
+    // keep it responsive: scale down via CSS if wider than container
+    CV.style.maxWidth='100%';
+
+    ctx.fillStyle=getVar('--kiln-2'); ctx.fillRect(0,0,W,H);
+    const dead=getVar('--dead'), bone=getVar('--bone'), ember=getVar('--ember'), ash=getVar('--ash');
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font=(cell*0.8)+'px ui-monospace,monospace';
+
+    for(let y=0;y<ROWS;y++){
+      const hidden=y>=foldRow;
+      for(let x=0;x<COLS;x++){
+        const alive=grid[y][x];
+        const px=x*cell, py=y*cell;
+        if(hidden){
+          // faint grid so the reader can fill it in
+          ctx.strokeStyle=getVar('--line');
+          ctx.globalAlpha=0.35; ctx.strokeRect(px+.5,py+.5,cell-1,cell-1); ctx.globalAlpha=1;
+          continue;
+        }
+        if(glyphMode && cell>=9){
+          if(alive){ ctx.fillStyle=(y===0?ember:bone); ctx.fillText('×',px+cell/2,py+cell/2+1);}
+          else { ctx.fillStyle=ash; ctx.globalAlpha=.5; ctx.fillText('o',px+cell/2,py+cell/2+1); ctx.globalAlpha=1;}
+        } else {
+          ctx.fillStyle=alive?(y===0?ember:bone):dead;
+          ctx.fillRect(px,py,cell-.5,cell-.5);
+        }
+      }
+    }
+    // fold line
+    if(foldRow<ROWS){
+      ctx.strokeStyle=ember; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(0,foldRow*cell+.5); ctx.lineTo(W,foldRow*cell+.5); ctx.stroke();
+    }
+    CV._cell=cell;
+  }
+
+  function getVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+  // ---- verdict ----
+  function drawVerdict(){
+    const info=KNOWN[rule];
+    document.getElementById('rn').textContent=rule;
+    document.getElementById('rin').value=rule;
+    const clsEl=document.getElementById('cls');
+    if(info){ clsEl.textContent=info[0]; document.getElementById('verdict').innerHTML=info[1];}
+    else { clsEl.textContent='—';
+      document.getElementById('verdict').innerHTML='Not a named rule. Read the bloom yourself: <b>regular</b> patterns hand over cleanly, <b>chaotic</b> ones carry more data but can\'t be continued by eye.';}
+    document.querySelectorAll('.pre').forEach(p=>p.classList.toggle('on',+p.dataset.r===rule));
+  }
+
+  // ---- full redraw ----
+  function render(){ compute(); drawTable(); drawBloom(); drawVerdict(); }
+
+  // ---- presets ----
+  const ph=document.getElementById('presets');
+  PRESETS.forEach(r=>{
+    const btn=document.createElement('button');
+    btn.className='pre'; btn.dataset.r=r;
+    btn.innerHTML='<b>'+r+'</b> '+(KNOWN[r]?KNOWN[r][0]:'');
+    btn.onclick=()=>{rule=r;render();};
+    ph.appendChild(btn);
+  });
+
+  // ---- controls ----
+  const rin=document.getElementById('rin');
+  document.getElementById('inc').onclick=()=>{rule=(rule+1)&255;render();};
+  document.getElementById('dec').onclick=()=>{rule=(rule+255)&255;render();};
+  rin.oninput=()=>{let v=parseInt(rin.value,10); if(!isNaN(v)){rule=Math.max(0,Math.min(255,v));render();}};
+
+  const nb=document.getElementById('notation');
+  nb.onclick=()=>{glyphMode=!glyphMode; nb.classList.toggle('on',glyphMode);
+    nb.textContent=glyphMode?'o / × marks':'solid cells'; drawBloom();};
+
+  const sb=document.getElementById('seedmode');
+  sb.onclick=()=>{seedMode=seedMode==='single'?'random':'single';
+    sb.textContent='seed: '+seedMode; makeSeed(); render();};
+
+  const fold=document.getElementById('fold'), foldv=document.getElementById('foldv');
+  fold.oninput=()=>{
+    foldRow=Math.round(ROWS*fold.value/100);
+    foldv.textContent = foldRow>=ROWS ? 'show all' : ('reveal '+foldRow+' / '+ROWS);
+    drawBloom();
+  };
+
+  // tap seed row to edit
+  CV.addEventListener('pointerdown',e=>{
+    const rect=CV.getBoundingClientRect();
+    const scale=CV.width/rect.width;
+    const cell=CV._cell;
+    const x=Math.floor((e.clientX-rect.left)*scale/cell);
+    const y=Math.floor((e.clientY-rect.top)*scale/cell);
+    if(y===0 && x>=0 && x<COLS){ seed[x]^=1; seedMode='custom'; sb.textContent='seed: custom'; render(); }
+  });
+
+  window.addEventListener('resize',()=>drawBloom());
+
+  // ---- init ----
+  makeSeed(); render();
+})();
+</script>
+</body>
+</html>
