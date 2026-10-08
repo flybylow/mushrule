@@ -46,21 +46,27 @@ Strudel’s `setcpm(n)` is **cycles per minute**. One cycle is the whole mini-no
 
 ## Tracks (one row per region)
 
-Each drawn region is a sequence track. They stack under **Sequence**. Click a row to select it; the matching color lights on the image. Click the name (`R1`) to rename it — that updates the `// R1` marker in generated code.
+Each drawn region is a sequence track. They stack under **Sequence**. Click a row to select it; the matching color lights on the image. Click the name (`R1`) to rename it — that updates the `// R1` marker in generated code. A new track picks a random pitched or rhythm sample (not `auto`); later tracks avoid a bank already in use when they can. `auto` stays in the dropdown. Loading a preset keeps saved banks and only randomizes tracks that were still `auto`.
 
-**Bank, steps, threshold, and mute are per track.** Scale, root, axis, and channel stay shared under Scan/Tuning.
+**Bank, steps, threshold, and mute are per track.** Scale, root, and pitch direction sit in the Sequence header (replacing the old “Sequence — n tracks” title). Axis and channel stay under Scan. The Tuning fold is gone.
 
-Between the bank dropdown and mute: a steps dropdown (`8 16 32 64`) and a sliders icon. The icon opens that row’s **threshold** slider and timbre metadata at the bottom. Steps stay on the dropdown — no per-row steps slider, and no global steps/threshold.
+Pitched notes walk the chosen scale by **step index**. Sequence header: **↑** rises left → right, **−** stays on the root (neutral), **↓** falls. Other automatic note/sound mappings: **root** sets the octave floor; **scale** picks the interval set; **gain** comes from each cell’s scanned brightness; **decay** comes from auto-timbre only when the bank is `auto`; rhythm banks (`bd` / `sd` / `hh` / `cp`) skip `note()` entirely.
+
+Between the bank dropdown and mute: steps (`−` / dropdown / `+`, any count from 1–64) and a sliders icon for that row’s threshold (slider, then `−` / number / `+`, 0–255). A newly drawn track opens that threshold row. Changing the step count keeps the full pattern in memory: `+` appends rests if that length is new, `−` hides the tail but does not delete it. Switching 16 → 32 → 16 → 32 restores the second half. Playback and the grid use only the current step count. Threshold, axis, and channel still re-scan the visible steps and leave the hidden tail alone. Scan and Sensor simulation fold closed by default.
 
 The old Regions list is the track list. JSON export includes `bank`, `muted`, `steps`, and `thresh` on each region.
 
-**Mute** is the speaker on each track. Outline = audible, slash = muted. The generated pane keeps the full `note()` / `.s()` / `.gain()` block. Each track is its own `$:` pattern (Strudel’s pattern id). Mute does **not** delete that block — the engine evaluates `_$: ` instead of `$: ` for that id (`Pattern.p` treats a leading `_` as silence). That is the same mute flag as strudel.cc. If every track is muted, evaluate still runs (silence), so the previous sound does not keep playing.
+**Mute** is the speaker on each track. Outline = audible, slash = muted. The generated pane keeps the full `note()` / `.s()` / `.gain()` block. Each track is its own `$:` pattern (Strudel’s pattern id). Mute does **not** delete that block — the engine evaluates `_$: ` instead of `$: ` for that id (`Pattern.p` treats a leading `_` as silence). That is the same mute flag as strudel.cc. If every track is muted, evaluate still runs (silence), so the previous sound does not keep playing. The yellow playhead is hidden on muted rows so a lit cell is not mistaken for a sounding hit.
 
 ## Presets
 
 **Presets** in the top nav opens a split panel (same slot as Code — one at a time). Left: named snapshots in `localStorage` (`pattern-reader.presets.v1`). Right: the selected preset — patterns, sample/bank per track, overlay, and metadata.
 
 A preset is the whole session minus the source image: scan/tuning settings, every track (geometry, sequence, bank, mute), generated left pane, and overlay. **Save** makes a new row. **Update** overwrites the selected one (keeps `createdAt`). **Load** or double-click applies it. The image is not stored (quota); UV regions land on whatever is loaded.
+
+Two tabs (Cursor’s browser and Chrome, for example) do **not** share the live pattern or the audio engine. Each has its own clock. They **do** share `localStorage` presets — last save wins; the other tab refreshes its preset list. Vite HMR also reaches every tab on localhost, so an agent reload can cut audio in the tab you are listening to. Use one tab for playing.
+
+Live updates (`+` / `−`, cell toggles) debounce ~40ms and coalesce while evaluate is running, then re-read the latest editor. Dirt samples (`gong`, `bd`, …) are preloaded so the first hit is not dropped while the wav is still fetching.
 
 Metadata is not one field:
 
@@ -70,6 +76,6 @@ Metadata is not one field:
 
 ## Generated DSL rules
 
-Strudel’s mini-notation parser rejects `|`, arrows, em dashes, degree symbols. Rhythm banks emit `s("bd").euclid(hits, steps)` — no `note()`. Synths and pitched banks emit `note("...").s("gong")`.
+Strudel’s mini-notation parser rejects `|`, arrows, em dashes, degree symbols. Rhythm banks emit `s("bd ~ ~ bd")` matching the lit cells — not `.euclid()`, which placed onsets that often missed the visual hits (and then `.gain("0")` silenced them). Synths and pitched banks emit `note("...").s("gong")`. A sample fires at the start of the step the playhead enters.
 
 Default image: `src/pages/pattern-reader/assets/tablet.jpg` (extracted from the HTML sketches).

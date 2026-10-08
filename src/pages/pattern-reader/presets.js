@@ -1,6 +1,7 @@
 import { tempoCpm } from "./pattern.js";
 
-const KEY = "pattern-reader.presets.v1";
+export const PRESET_KEY = "pattern-reader.presets.v1";
+const KEY = PRESET_KEY;
 
 export function loadPresets() {
   try {

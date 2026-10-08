@@ -3,18 +3,38 @@ import { evalScope, silence } from "@strudel/core";
 import { flash, highlightMiniLocations, initEditor, StrudelMirror, updateMiniLocations } from "@strudel/codemirror";
 import { miniAllStrings } from "@strudel/mini";
 import { transpiler } from "@strudel/transpiler";
-import { getAudioContext, initAudioOnFirstClick, registerSynthSounds, samples, webaudioOutput } from "@strudel/webaudio";
-import { composeSong, stripTempo } from "./pattern.js";
+import { getAudioContext, getSampleBuffer, initAudioOnFirstClick, registerSynthSounds, samples, webaudioOutput } from "@strudel/webaudio";
+import { composeSong, PITCHED_BANKS, RHYTHM_BANKS, stripTempo } from "./pattern.js";
 
 miniAllStrings();
+
+const WARM_NOTES = ["c3", "d3", "e3", "g3", "a3", "c4", "d4", "g4", "a4"];
+
+async function warmupDirt() {
+  const jobs = [
+    ...RHYTHM_BANKS.map((s) => getSampleBuffer({ s, n: 0 })),
+    ...PITCHED_BANKS.flatMap((s) => WARM_NOTES.map((note) => getSampleBuffer({ s, note }))),
+  ];
+  await Promise.all(jobs.map((job) => job.catch(() => null)));
+}
 
 async function patternReaderPrebake() {
   await evalScope(import("@strudel/core"), import("@strudel/mini"), import("@strudel/tonal"), import("@strudel/webaudio"));
   await registerSynthSounds();
   try {
     await samples("github:tidalcycles/dirt-samples");
+    await warmupDirt();
   } catch {
     /* synths still play if Dirt is unreachable */
+  }
+}
+
+async function resumeAudio() {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === "suspended") await ctx.resume();
+  } catch {
+    /* evaluate still unlocks audio */
   }
 }
 
@@ -84,6 +104,7 @@ export function useStrudel(leftHostRef, rightHostRef, getCpm, getMuted) {
   const playingRef = useRef(false);
   const evalLock = useRef(false);
   const pendingRef = useRef(null);
+  const debounceRef = useRef(0);
 
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
@@ -109,42 +130,56 @@ export function useStrudel(leftHostRef, rightHostRef, getCpm, getMuted) {
     return song.code;
   }, [getLeft, getRight]);
 
-  const pushCode = useCallback(async (code, autostart = true) => {
+  const pushCode = useCallback(async (autostart = true) => {
     const mirror = mirrorRef.current;
     if (!mirror) return;
+    if (evalLock.current) {
+      pendingRef.current = autostart;
+      return;
+    }
+    const code = composeNow();
     if (!code) {
       setError("No pattern — draw a region or type in either pane");
       return;
     }
-    if (evalLock.current) {
-      pendingRef.current = { code, autostart };
-      return;
-    }
     evalLock.current = true;
     try {
+      await resumeAudio();
       await mirror.repl.evaluate(code, autostart);
       setError("");
     } catch (err) {
       setError(err?.message || String(err));
     } finally {
       evalLock.current = false;
-      if (pendingRef.current) {
-        const next = pendingRef.current;
+      if (pendingRef.current != null) {
+        const nextStart = pendingRef.current;
         pendingRef.current = null;
-        void pushCode(next.code, next.autostart);
+        void pushCode(nextStart);
       }
     }
-  }, []);
+  }, [composeNow]);
 
-  const update = useCallback(async () => {
-    try {
-      flash(leftViewRef.current);
-      flash(rightViewRef.current);
-    } catch {
-      /* flash is optional */
-    }
-    await pushCode(composeNow(), true);
-  }, [composeNow, pushCode]);
+  const update = useCallback(
+    (immediate = false) => {
+      try {
+        flash(leftViewRef.current);
+        flash(rightViewRef.current);
+      } catch {
+        /* flash is optional */
+      }
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      if (immediate) {
+        debounceRef.current = 0;
+        return pushCode(true);
+      }
+      debounceRef.current = window.setTimeout(() => {
+        debounceRef.current = 0;
+        void pushCode(true);
+      }, 40);
+      return Promise.resolve();
+    },
+    [pushCode],
+  );
 
   useEffect(() => {
     const leftRoot = leftHostRef.current;
@@ -225,6 +260,11 @@ export function useStrudel(leftHostRef, rightHostRef, getCpm, getMuted) {
     setReady(true);
 
     return () => {
+      if (debounceRef.current) {
+        window.clearTimeout(debounceRef.current);
+        debounceRef.current = 0;
+      }
+      pendingRef.current = null;
       try {
         mirror.stop();
         mirror.clear();
@@ -243,21 +283,21 @@ export function useStrudel(leftHostRef, rightHostRef, getCpm, getMuted) {
   }, [leftHostRef, rightHostRef, update]);
 
   const start = useCallback(async () => {
-    try {
-      const ctx = getAudioContext();
-      if (ctx.state === "suspended") await ctx.resume();
-    } catch {
-      /* first evaluate still unlocks audio */
-    }
+    await resumeAudio();
     playingRef.current = true;
     setPlaying(true);
-    await update();
+    await update(true);
   }, [update]);
 
   const stop = useCallback(() => {
     playingRef.current = false;
     setPlaying(false);
     setPhase(0);
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = 0;
+    }
+    pendingRef.current = null;
     try {
       mirrorRef.current?.stop();
     } catch {

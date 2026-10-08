@@ -149,6 +149,33 @@ body {
   font-weight: 400;
 }
 
+.pr-fold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pr-fold h2 {
+  margin-bottom: 0;
+}
+
+.pr-sec:not(.folded) .pr-fold {
+  margin-bottom: 6px;
+}
+
+.pr-fold-mark {
+  color: var(--acc);
+  font-size: 12px;
+  line-height: 1;
+}
+
 .pr-row {
   display: flex;
   align-items: center;
@@ -181,9 +208,10 @@ body {
 
 .pr-val {
   min-width: 28px;
-  text-align: right;
+  text-align: center;
   color: var(--txt);
   font-size: 10px;
+  line-height: 18px;
 }
 
 .pr-timbre-info {
@@ -205,6 +233,34 @@ body {
   overflow-y: auto;
   padding: 8px 10px;
   border-bottom: 1px solid var(--bd);
+}
+
+.pr-seq-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.pr-seq-ctl {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  color: var(--txt);
+  font: inherit;
+  font-size: 9px;
+  padding: 1px 2px;
+  height: 18px;
+  max-width: 64px;
+  min-width: 0;
+}
+
+.pr-seq-bar .pr-step-btn {
+  font-size: 10px;
+}
+
+.pr-seq-bar .pr-step-btn.on {
+  border-color: var(--acc);
+  color: var(--acc);
 }
 
 .pr-seq-empty {
@@ -310,6 +366,39 @@ body {
   padding: 1px 4px;
 }
 
+.pr-stepper {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.pr-step-btn {
+  background: none;
+  border: 1px solid var(--bd);
+  color: var(--txt);
+  width: 16px;
+  height: 18px;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pr-step-btn:hover:not(:disabled) {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+
+.pr-step-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .pr-steps {
   background: var(--s1);
   border: 1px solid var(--bd);
@@ -317,12 +406,13 @@ body {
   padding: 1px 2px;
   font: inherit;
   font-size: 10px;
-  max-width: 46px;
+  max-width: 42px;
   min-width: 0;
 }
 
 .pr-seq-track.active .pr-steps,
-.pr-seq-track.active .pr-rname {
+.pr-seq-track.active .pr-rname,
+.pr-seq-track.active .pr-step-btn {
   border-color: var(--track);
 }
 

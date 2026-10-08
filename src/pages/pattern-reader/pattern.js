@@ -22,11 +22,29 @@ export const PITCHED_BANKS = [
   "wind",
 ];
 export const RHYTHM_BANKS = ["bd", "sd", "hh", "cp"];
+export const SAMPLE_BANKS = [...PITCHED_BANKS, ...RHYTHM_BANKS];
+
+export function pickRandomSample(avoid = []) {
+  const skip = new Set(avoid.filter(Boolean));
+  const pool = SAMPLE_BANKS.filter((name) => !skip.has(name));
+  const list = pool.length ? pool : SAMPLE_BANKS;
+  return list[Math.floor(Math.random() * list.length)];
+}
 
 const NOTE_NAMES = ["c", "db", "d", "eb", "e", "f", "gb", "g", "ab", "a", "bb", "b"];
 
 function isRhythm(bank) {
   return RHYTHM_BANKS.includes(bank);
+}
+
+export function activePattern(region) {
+  const stored = region?.sequence || [];
+  const nRaw = Number(region?.steps);
+  const n = Number.isFinite(nRaw) ? Math.max(1, Math.min(64, Math.round(nRaw))) : stored.length;
+  const sequence = stored.slice(0, n);
+  const storedVals = region?.vals || [];
+  const vals = storedVals.length ? storedVals.slice(0, sequence.length) : sequence.map((hit) => hit * 180);
+  return { sequence, vals };
 }
 
 export function resolveTimbre(region) {
@@ -44,34 +62,42 @@ function valsToGain(vals, sequence) {
     .join(" ");
 }
 
-function notePattern(sequence, scaleKey, rootNote) {
+export function pitchDirOf(settings) {
+  const dir = settings?.pitchDir;
+  if (dir === "up" || dir === "flat" || dir === "down") return dir;
+  if (settings?.pitchUp === false) return "down";
+  return "up";
+}
+
+function notePattern(sequence, scaleKey, rootNote, pitchDir = "up") {
   const semis = SCALES[scaleKey] || SCALES.penta;
   const oct = parseInt(rootNote.slice(-1), 10);
+  const n = sequence.length;
   return sequence
     .map((hit, i) => {
       if (!hit) return "~";
-      const semi = semis[Math.floor((i / sequence.length) * semis.length) % semis.length];
+      const pos = pitchDir === "down" ? n - 1 - i : pitchDir === "flat" ? 0 : i;
+      const semi = semis[Math.floor((pos / n) * semis.length) % semis.length];
       return `${NOTE_NAMES[semi % 12]}${oct + Math.floor(semi / 12)}`;
     })
     .join(" ");
 }
 
 function regionCode(region, settings) {
-  const sequence = region.sequence || [];
+  const { sequence, vals } = activePattern(region);
   if (!sequence.length) return "";
   const hits = sequence.filter(Boolean).length;
   if (!hits) return "";
-  const vals = region.vals || sequence.map((hit) => hit * 180);
   const { synth, decay } = resolveTimbre(region);
   const gainPat = valsToGain(vals, sequence);
 
   const label = region.name ? `// ${region.name}\n` : "";
   if (isRhythm(synth)) {
-    const euclid = hits > 0 ? `.euclid(${hits}, ${sequence.length})` : "";
-    return `${label}${[`s("${synth}")${euclid}`, `  .gain("${gainPat}")`].join("\n")}`;
+    const hitsPat = sequence.map((hit) => (hit ? synth : "~")).join(" ");
+    return `${label}${[`s("${hitsPat}")`, `  .gain("${gainPat}")`].join("\n")}`;
   }
 
-  const notes = notePattern(sequence, settings.scaleKey, settings.rootNote);
+  const notes = notePattern(sequence, settings.scaleKey, settings.rootNote, pitchDirOf(settings));
   return `${label}${[`note("${notes}")`, `  .s("${synth}")`, `  .gain("${gainPat}")`, `  .decay(${decay})`].join("\n")}`;
 }
 
@@ -92,10 +118,10 @@ function tagPattern(code) {
 }
 
 export function applyMuteTags(code, mutedNames) {
-  if (!code || !mutedNames?.length) return code;
-  const muted = new Set(mutedNames);
-  return code.replace(/^(\/\/\s*(\S+)[^\n]*\n)(_?)(\$:)/gm, (all, head, name, under) => {
-    const mute = muted.has(name);
+  if (!code) return code;
+  const muted = new Set(mutedNames || []);
+  return code.replace(/^(\/\/\s*(.+?)\s*\n)(_?)(\$:)/gm, (all, head, name, under) => {
+    const mute = muted.has(name.trim());
     if (mute && !under) return `${head}_$:`;
     if (!mute && under) return `${head}$:`;
     return all;
